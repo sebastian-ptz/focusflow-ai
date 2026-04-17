@@ -16,7 +16,7 @@ An ADHD coaching app that breaks tasks into 2-minute micro-steps with adaptive A
 │  - see subtasks     │     │    reminders)    │     │    nudges       │
 │  - mark done        │     │  - Auth (JWT)    │     │  - email/push   │
 │  - get nudges       │     └──────────────────┘     │    delivery     │
-└─────────────────────┘              │                └─────────────────┘
+└─────────────────────┘              │               └─────────────────┘
         ▲                            │                        │
         └────── realtime toast ──────┘                        │
                                      ▲                        │
@@ -30,7 +30,7 @@ An ADHD coaching app that breaks tasks into 2-minute micro-steps with adaptive A
 
 ---
 
-## Quick Start
+## Local Quick Start
 
 ```bash
 # 1. Install dependencies
