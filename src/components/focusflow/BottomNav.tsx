@@ -1,10 +1,11 @@
 import * as React from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, History, Settings } from "lucide-react";
+import { Home, CalendarDays, History, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/", label: "Home", icon: Home },
+  { to: "/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/history", label: "History", icon: History },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;

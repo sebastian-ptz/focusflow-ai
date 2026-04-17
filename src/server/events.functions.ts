@@ -5,7 +5,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { dispatchN8nEvent, type N8nEventKind } from "./n8n";
+import { dispatchEvent, type N8nEventKind } from "./n8n";
 
 const IDLE_HOURS = 3;
 const STALE_HOURS = 24;
@@ -78,7 +78,7 @@ export const emitSubtaskCompleted = createServerFn({ method: "POST" })
     if (!task) return { ok: false };
 
     const message = await generateMessage("subtask.completed", task.title);
-    await dispatchN8nEvent({
+    await dispatchEvent(supabase, {
       kind: "subtask.completed",
       userId,
       taskId: task.id,
@@ -94,7 +94,7 @@ export const emitSubtaskCompleted = createServerFn({ method: "POST" })
       .neq("status", "done");
     if (remaining && remaining.length === 0) {
       const doneMsg = await generateMessage("task.completed", task.title);
-      await dispatchN8nEvent({
+      await dispatchEvent(supabase, {
         kind: "task.completed",
         userId,
         taskId: task.id,
@@ -126,7 +126,7 @@ export const scanForNudges = createServerFn({ method: "POST" })
       const kind: N8nEventKind =
         t.last_activity_at < staleCutoff ? "task.stale_restart" : "task.idle_nudge";
       const message = await generateMessage(kind, t.title);
-      await dispatchN8nEvent({ kind, userId, taskId: t.id, message });
+      await dispatchEvent(supabase, { kind, userId, taskId: t.id, message });
       fired.push({ taskId: t.id, kind, message });
     }
     return { fired };

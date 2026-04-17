@@ -66,10 +66,21 @@ function Home() {
     if (user) loadTasks();
   }, [user, loadTasks]);
 
-  // On app open: scan for idle/stale tasks and dispatch n8n nudges.
+  // On app open: scan for idle/stale tasks and surface nudges as toasts.
   React.useEffect(() => {
     if (!user) return;
-    callAuthed(scanForNudges, {}).catch(() => {});
+    callAuthed(scanForNudges, {})
+      .then((res) => {
+        const fired = (res as { fired?: Array<{ kind: string; message: string }> } | undefined)?.fired ?? [];
+        for (const ev of fired) {
+          if (ev.kind === "task.completed" || ev.kind === "subtask.completed") {
+            toast.success(ev.message);
+          } else {
+            toast(ev.message);
+          }
+        }
+      })
+      .catch(() => {});
   }, [user]);
 
   const createTask = async (e: React.FormEvent) => {

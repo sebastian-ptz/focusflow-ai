@@ -74,6 +74,7 @@ export type Database = {
           done_at: string | null
           id: string
           position: number
+          scheduled_at: string | null
           status: string
           task_id: string
           title: string
@@ -84,6 +85,7 @@ export type Database = {
           done_at?: string | null
           id?: string
           position?: number
+          scheduled_at?: string | null
           status?: string
           task_id: string
           title: string
@@ -94,6 +96,7 @@ export type Database = {
           done_at?: string | null
           id?: string
           position?: number
+          scheduled_at?: string | null
           status?: string
           task_id?: string
           title?: string
@@ -115,6 +118,7 @@ export type Database = {
           id: string
           last_activity_at: string
           notes: string | null
+          scheduled_for: string | null
           status: string
           title: string
           updated_at: string
@@ -125,6 +129,7 @@ export type Database = {
           id?: string
           last_activity_at?: string
           notes?: string | null
+          scheduled_for?: string | null
           status?: string
           title: string
           updated_at?: string
@@ -135,6 +140,7 @@ export type Database = {
           id?: string
           last_activity_at?: string
           notes?: string | null
+          scheduled_for?: string | null
           status?: string
           title?: string
           updated_at?: string

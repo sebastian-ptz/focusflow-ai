@@ -1,9 +1,11 @@
-// Phase 3 — n8n event dispatch.
-// If N8N_WEBHOOK_URL is unset, we no-op (log only). Set it later to enable.
+// Phase 3 — event dispatch.
+// Persists every event to the `reminders` table (audit trail / in-app surface)
+// and optionally POSTs to an n8n webhook if N8N_WEBHOOK_URL is set.
 //
-// To configure: open Lovable Cloud → Settings → Secrets and add
-// `N8N_WEBHOOK_URL` pointing at your self-hosted n8n webhook
-// (e.g. https://n8n.example.com/webhook/focusflow).
+// To enable n8n: add `N8N_WEBHOOK_URL` in Lovable Cloud → Settings → Secrets
+// pointing at your self-hosted n8n webhook (e.g. https://n8n.example.com/webhook/focusflow).
+
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type N8nEventKind =
   | "task.idle_nudge"
@@ -20,7 +22,25 @@ export interface N8nEvent {
   meta?: Record<string, unknown>;
 }
 
-export async function dispatchN8nEvent(event: N8nEvent): Promise<void> {
+export async function dispatchEvent(
+  supabase: SupabaseClient,
+  event: N8nEvent,
+): Promise<void> {
+  // 1. Persist to reminders (RLS-safe via authed client).
+  const { error } = await supabase.from("reminders").insert({
+    user_id: event.userId,
+    task_id: event.taskId,
+    subtask_id: event.subtaskId ?? null,
+    kind: event.kind,
+    message: event.message,
+    channel: "web",
+    sent_at: new Date().toISOString(),
+  });
+  if (error) {
+    console.error("[events] reminders insert failed:", error.message);
+  }
+
+  // 2. Optional n8n webhook.
   const url = process.env.N8N_WEBHOOK_URL;
   if (!url) {
     console.info("[n8n] skipped (N8N_WEBHOOK_URL not set):", event.kind);
@@ -39,3 +59,6 @@ export async function dispatchN8nEvent(event: N8nEvent): Promise<void> {
     console.error("[n8n] dispatch error:", err);
   }
 }
+
+// Back-compat alias.
+export const dispatchN8nEvent = dispatchEvent;

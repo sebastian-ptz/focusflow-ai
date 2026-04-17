@@ -1,19 +1,26 @@
 import * as React from "react";
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { ArrowLeft, Plus, Sparkles, Scissors, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Sparkles, Scissors, Trash2, LifeBuoy, X, CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { breakDownTask } from "@/server/ai.functions";
+import { coachUnstick } from "@/server/coach.functions";
 import { emitSubtaskCompleted } from "@/server/events.functions";
 import { callAuthed } from "@/lib/callAuthed";
 import { AppShell } from "@/components/focusflow/AppShell";
 import { SectionHeading } from "@/components/focusflow/SectionHeading";
 import { PrimaryAction } from "@/components/focusflow/PrimaryAction";
 import { SecondaryAction } from "@/components/focusflow/SecondaryAction";
+import { CoachBubble } from "@/components/focusflow/CoachBubble";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { slotSteps, formatSlot } from "@/lib/slotting";
 
 type TaskStatus = "not_started" | "in_progress" | "done";
 type SubStatus = "todo" | "done";
@@ -23,12 +30,38 @@ interface Task {
   title: string;
   notes: string | null;
   status: TaskStatus;
+  scheduled_for: string | null;
 }
 interface Subtask {
   id: string;
   title: string;
   position: number;
   status: SubStatus;
+  scheduled_at: string | null;
+}
+
+// Re-slot all `todo` subtasks for a task across its scheduled date.
+// Done subtasks keep their existing scheduled_at (or null).
+async function reslotTaskSteps(taskId: string, dateYmd: string | null) {
+  const { data, error } = await supabase
+    .from("subtasks")
+    .select("id,status,position")
+    .eq("task_id", taskId)
+    .order("position", { ascending: true });
+  if (error || !data) return;
+  if (!dateYmd) {
+    // Clear all when task is unscheduled.
+    await supabase.from("subtasks").update({ scheduled_at: null }).eq("task_id", taskId);
+    return;
+  }
+  const todos = data.filter((s) => s.status === "todo");
+  const slots = slotSteps(dateYmd, todos.length);
+  await Promise.all(
+    todos.map((s, i) => {
+      const at = slots[i] ? slots[i].toISOString() : null;
+      return supabase.from("subtasks").update({ scheduled_at: at }).eq("id", s.id);
+    }),
+  );
 }
 
 export const Route = createFileRoute("/tasks/$taskId")({
@@ -47,11 +80,26 @@ function TaskDetail() {
   const [loadingData, setLoadingData] = React.useState(true);
   const [newSub, setNewSub] = React.useState("");
   const [aiBusy, setAiBusy] = React.useState<null | "breakdown" | string>(null);
+  const [coachMsg, setCoachMsg] = React.useState<string | null>(null);
+  const [coachBusy, setCoachBusy] = React.useState(false);
+
+  const askCoach = async () => {
+    if (!task) return;
+    setCoachBusy(true);
+    try {
+      const res = await callAuthed(coachUnstick, { taskId: task.id });
+      setCoachMsg(res.message);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Coach is unavailable.");
+    } finally {
+      setCoachBusy(false);
+    }
+  };
 
   const reloadSubtasks = React.useCallback(async () => {
     const { data, error } = await supabase
       .from("subtasks")
-      .select("id,title,position,status")
+      .select("id,title,position,status,scheduled_at")
       .eq("task_id", taskId)
       .order("position", { ascending: true });
     if (error) toast.error(error.message);
@@ -68,6 +116,7 @@ function TaskDetail() {
         title: task.title,
         notes: task.notes ?? undefined,
       });
+      if (task.scheduled_for) await reslotTaskSteps(task.id, task.scheduled_for);
       await reloadSubtasks();
       toast.success(`Added ${res.steps.length} tiny steps.`);
     } catch (e) {
@@ -88,6 +137,7 @@ function TaskDetail() {
         stepText: sub.title,
         stepId: sub.id,
       });
+      if (task.scheduled_for) await reslotTaskSteps(task.id, task.scheduled_for);
       await reloadSubtasks();
       toast.success(`Shrunk into ${res.steps.length} smaller steps.`);
     } catch (e) {
@@ -107,10 +157,10 @@ function TaskDetail() {
     (async () => {
       setLoadingData(true);
       const [{ data: t, error: tErr }, { data: s, error: sErr }] = await Promise.all([
-        supabase.from("tasks").select("id,title,notes,status").eq("id", taskId).single(),
+        supabase.from("tasks").select("id,title,notes,status,scheduled_for").eq("id", taskId).single(),
         supabase
           .from("subtasks")
-          .select("id,title,position,status")
+          .select("id,title,position,status,scheduled_at")
           .eq("task_id", taskId)
           .order("position", { ascending: true }),
       ]);
@@ -136,7 +186,7 @@ function TaskDetail() {
     const { data, error } = await supabase
       .from("subtasks")
       .insert({ task_id: taskId, user_id: user.id, title: newSub.trim(), position })
-      .select("id,title,position,status")
+      .select("id,title,position,status,scheduled_at")
       .single();
     if (error) {
       toast.error(error.message);
@@ -144,6 +194,10 @@ function TaskDetail() {
     }
     setSubtasks((prev) => [...prev, data as Subtask]);
     setNewSub("");
+    if (task?.scheduled_for) {
+      await reslotTaskSteps(taskId, task.scheduled_for);
+      await reloadSubtasks();
+    }
   };
 
   const toggleSubtask = async (sub: Subtask) => {
@@ -218,6 +272,81 @@ function TaskDetail() {
         />
 
         <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Scheduled for
+          </span>
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "h-12 flex-1 justify-start text-left font-normal",
+                    !task.scheduled_for && "text-muted-foreground",
+                  )}
+                >
+                  <CalendarIcon className="mr-2 size-4" />
+                  {task.scheduled_for
+                    ? format(new Date(task.scheduled_for + "T00:00:00"), "PPP")
+                    : "Pick a date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={
+                    task.scheduled_for
+                      ? new Date(task.scheduled_for + "T00:00:00")
+                      : undefined
+                  }
+                  onSelect={async (d) => {
+                    if (!d) return;
+                    const y = d.getFullYear();
+                    const m = String(d.getMonth() + 1).padStart(2, "0");
+                    const day = String(d.getDate()).padStart(2, "0");
+                    const next = `${y}-${m}-${day}`;
+                    const { error } = await supabase
+                      .from("tasks")
+                      .update({ scheduled_for: next })
+                      .eq("id", taskId);
+                    if (error) toast.error(error.message);
+                    else {
+                      setTask((t) => (t ? { ...t, scheduled_for: next } : t));
+                      await reslotTaskSteps(taskId, next);
+                      await reloadSubtasks();
+                      toast.success("Scheduled — steps timed across the day.");
+                    }
+                  }}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
+            {task.scheduled_for && (
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Clear date"
+                onClick={async () => {
+                  const { error } = await supabase
+                    .from("tasks")
+                    .update({ scheduled_for: null })
+                    .eq("id", taskId);
+                  if (error) toast.error(error.message);
+                  else {
+                    setTask((t) => (t ? { ...t, scheduled_for: null } : t));
+                    await reslotTaskSteps(taskId, null);
+                    await reloadSubtasks();
+                  }
+                }}
+              >
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
           {subtasks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No subtasks yet. Add the smallest first thing you could do — under 2 minutes.
@@ -242,6 +371,19 @@ function TaskDetail() {
                 >
                   {sub.title}
                 </span>
+                {sub.scheduled_at && (
+                  <span
+                    className={cn(
+                      "shrink-0 rounded bg-muted px-2 py-0.5 text-xs tabular-nums",
+                      new Date(sub.scheduled_at) < new Date()
+                        ? "text-muted-foreground/60"
+                        : "text-foreground",
+                    )}
+                    title={new Date(sub.scheduled_at).toLocaleString()}
+                  >
+                    {formatSlot(new Date(sub.scheduled_at))}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={() => shrinkStep(sub)}
@@ -280,6 +422,23 @@ function TaskDetail() {
         <SecondaryAction fullWidth onClick={runBreakdown} disabled={aiBusy === "breakdown"}>
           <Sparkles /> {aiBusy === "breakdown" ? "Thinking…" : "Break it down for me"}
         </SecondaryAction>
+
+        <SecondaryAction fullWidth onClick={askCoach} disabled={coachBusy}>
+          <LifeBuoy /> {coachBusy ? "Thinking…" : "I'm stuck — talk me through it"}
+        </SecondaryAction>
+
+        {coachMsg && (
+          <div className="flex flex-col gap-2">
+            <CoachBubble from="coach">{coachMsg}</CoachBubble>
+            <button
+              type="button"
+              onClick={() => setCoachMsg(null)}
+              className="inline-flex items-center gap-1 self-end text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3" /> dismiss
+            </button>
+          </div>
+        )}
 
         <SecondaryAction fullWidth onClick={deleteTask}>
           Delete task

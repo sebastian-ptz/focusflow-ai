@@ -36,7 +36,7 @@ Supporting signals:
 Specific quantitative targets: _TBD._
 
 ## Still out of scope
-- Calendar / meeting scheduling
+- External calendar / meeting scheduling (Google, iCal, etc.). Note: a lightweight in-app "schedule a task for a date" view is in scope as a planning aid — it does not import external events.
 - Team or social features
 - Gamification (streaks, badges, points)
 - Native mobile apps
