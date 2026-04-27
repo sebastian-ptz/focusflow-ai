@@ -9,14 +9,15 @@ An ADHD coaching app that breaks tasks into 2-minute micro-steps with adaptive A
 ## Architecture
 
 ```
-┌─────────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  FocusFlow app      │────▶│  Supabase        │◀───▶│  n8n workflows  │
-│  (TanStack Start)   │     │  - DB (tasks,    │     │  - reminder loop│
-│  - capture task     │     │    subtasks,     │     │  - motivational │
-│  - see subtasks     │     │    reminders)    │     │    nudges       │
-│  - mark done        │     │  - Auth (JWT)    │     │  - email/push   │
-│  - get nudges       │     └──────────────────┘     │    delivery     │
-└─────────────────────┘              │               └─────────────────┘
+                                                        not implemented
+┌─────────────────────┐      ┌──────────────────┐     ┌─────────────────┐
+│  FocusFlow app      │────▶│  Supabase         │◀─▶│  n8n workflows  │
+│  (TanStack Start)   │      │  - DB (tasks,    │     │  - reminder loop│
+│  - capture task     │      │    subtasks,     │     │  - motivational │
+│  - see subtasks     │      │    reminders)    │     │    nudges       │
+│  - mark done        │      │  - Auth (JWT)    │     │  - email/push   │
+│  - get nudges       │      └──────────────────┘     │    delivery     │
+└─────────────────────┘              │                └─────────────────┘
         ▲                            │                        │
         └────── realtime toast ──────┘                        │
                                      ▲                        │
